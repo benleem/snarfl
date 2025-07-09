@@ -58,9 +58,6 @@ func (p *Pool) worker() {
 			p.jobWg.Done()
 			continue
 		}
-		// p.mu.Lock()
-		// p.crawledUrls[result.Url] = struct{}{}
-		// p.mu.Unlock()
 		p.Results <- result
 		p.jobWg.Done()
 	}
