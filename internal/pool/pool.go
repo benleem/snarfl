@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"slices"
+	"os"
 	"strings"
 	"sync"
 
@@ -21,7 +21,7 @@ type Pool struct {
 	jobs        chan Seed
 	Results     chan SeedResult
 	mu          sync.Mutex
-	crawledUrls []string
+	crawledUrls map[string]struct{}
 }
 
 func NewPool(maxGoRoutines int, initSeed string) (*Pool, error) {
@@ -36,7 +36,7 @@ func NewPool(maxGoRoutines int, initSeed string) (*Pool, error) {
 		scheme:      scheme,
 		jobs:        make(chan Seed),
 		Results:     make(chan SeedResult),
-		crawledUrls: []string{},
+		crawledUrls: map[string]struct{}{},
 	}
 	for range maxGoRoutines {
 		p.workWg.Add(1)
@@ -49,13 +49,18 @@ func (p *Pool) worker() {
 	defer p.workWg.Done()
 	for j := range p.jobs {
 		result := j.Task(p)
-		if result.Err != nil && result.Err.Error() == "duplicate" {
+		if result.Err != nil {
+			if result.Err.Error() == "duplicate" {
+				p.jobWg.Done()
+				continue
+			}
+			fmt.Println(result.Err.Error())
 			p.jobWg.Done()
-			return
+			continue
 		}
-		p.mu.Lock()
-		p.crawledUrls = append(p.crawledUrls, result.Url)
-		p.mu.Unlock()
+		// p.mu.Lock()
+		// p.crawledUrls[result.Url] = struct{}{}
+		// p.mu.Unlock()
 		p.Results <- result
 		p.jobWg.Done()
 	}
@@ -71,6 +76,22 @@ func (p *Pool) Shutdown() {
 	close(p.jobs)
 	p.workWg.Wait()
 	close(p.Results)
+}
+
+func (p *Pool) Writer(filename string) {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		// return fmt.Errorf("error opening file: %s", err)
+		fmt.Println("error opening file: ", err)
+		return
+	}
+	defer file.Close()
+	for seed := range p.Results {
+		fmt.Println("writing to file: ", filename)
+		if _, err := file.WriteString(seed.Url + "\n"); err != nil {
+			fmt.Println("error writing to file:", err)
+		}
+	}
 }
 
 type SeedResult struct {
@@ -89,26 +110,26 @@ func NewSeed(url string) *Seed {
 }
 
 func (s *Seed) Task(p *Pool) SeedResult {
-	// need to convert crawledUrls to map for better search performance
-	if slices.Contains(p.crawledUrls, s.url) {
+	p.mu.Lock()
+	_, crawled := p.crawledUrls[s.url]
+	if crawled {
+		p.mu.Unlock()
 		return SeedResult{Url: s.url, Title: "", Content: "", Err: fmt.Errorf("duplicate")}
 	}
-	fmt.Printf("fetching content: %s\n", s.url)
+	p.crawledUrls[s.url] = struct{}{}
+	p.mu.Unlock()
+	// if slices.Contains(p.crawledUrls, s.url) {
+	// 	return SeedResult{Url: s.url, Title: "", Content: "", Err: fmt.Errorf("duplicate")}
+	// }
+	fmt.Println("fetching: ", s.url)
 	content, err := s.fetch()
 	if err != nil {
 		return SeedResult{Url: s.url, Title: "", Content: string(content), Err: err}
 	}
-	fmt.Printf("parsing: %s\n", s.url)
-	title, links, err := s.parse(content)
+	fmt.Println("parsing: ", s.url)
+	title, err := s.parse(content, p)
 	if err != nil && err.Error() != "EOF" {
 		return SeedResult{Url: s.url, Title: title, Content: string(content), Err: err}
-	}
-	for _, link := range links {
-		validUrl, valid := s.validateUrl(link, p)
-		if valid {
-			seed := NewSeed(validUrl)
-			p.AddJob(*seed)
-		}
 	}
 	return SeedResult{Url: s.url, Title: title, Content: string(content), Err: nil}
 }
@@ -137,13 +158,12 @@ func (s *Seed) fetch() ([]byte, error) {
 	case http.StatusOK:
 		return bodyBytes, nil
 	default:
-		return nil, fmt.Errorf("error fetching seed url: %s", resp.Status)
+		return nil, fmt.Errorf("error fetching %s: %s", s.url, resp.Status)
 	}
 }
 
-func (s *Seed) parse(content []byte) (string, []string, error) {
+func (s *Seed) parse(content []byte, p *Pool) (string, error) {
 	z := html.NewTokenizer(bytes.NewReader(content))
-	var links []string
 	var title string
 	body := false
 	depth := 0
@@ -154,11 +174,11 @@ func (s *Seed) parse(content []byte) (string, []string, error) {
 		case html.ErrorToken:
 			if z.Err().Error() == "EOF" {
 				if !body {
-					return title, links, fmt.Errorf("webpage has no content")
+					return title, fmt.Errorf("webpage has no content")
 				}
-				return title, links, nil
+				return title, nil
 			}
-			return title, links, z.Err()
+			return title, z.Err()
 		case html.TextToken:
 			text := token.Data
 			// need more checks if wanting to parse out text other than title
@@ -189,7 +209,11 @@ func (s *Seed) parse(content []byte) (string, []string, error) {
 							z.Next()
 							continue
 						}
-						links = append(links, a.Val)
+						validUrl, valid := s.validateUrl(a.Val, p)
+						if valid {
+							seed := NewSeed(validUrl)
+							p.AddJob(*seed)
+						}
 					} else {
 						z.Next()
 						continue

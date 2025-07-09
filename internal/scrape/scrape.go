@@ -1,8 +1,6 @@
 package scrape
 
 import (
-	"fmt"
-
 	"github.com/benleem/snarfl/internal/pool"
 )
 
@@ -28,17 +26,11 @@ func (s *Scraper) Crawl() error {
 	initSeed := pool.NewSeed(s.initSeed)
 	p.AddJob(*initSeed)
 	go p.Shutdown()
-	for r := range p.Results {
-		if r.Err != nil {
-			fmt.Printf("error at %s: %s\n", r.Url, r.Err)
-			continue
-		}
-		fmt.Println("result:", r)
-	}
+	p.Writer(*s.outFile)
 	return nil
 }
 
-func (s *Scraper) extract() error {
-	fmt.Printf("outputting to file: %s", *s.outFile)
-	return nil
-}
+// func (s *Scraper) extract() error {
+// 	fmt.Printf("outputting to file: %s", *s.outFile)
+// 	return nil
+// }
