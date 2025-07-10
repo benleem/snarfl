@@ -84,6 +84,7 @@ func (p *Pool) Writer(filename string) {
 	}
 	defer file.Close()
 	for seed := range p.Results {
+		// fmt.Println(seed)
 		fmt.Println("writing to file: ", filename)
 		if _, err := file.WriteString(seed.Url + "\n"); err != nil {
 			fmt.Println("error writing to file:", err)
@@ -186,7 +187,6 @@ func (s *Seed) parse(content []byte, p *Pool) (string, error) {
 			tag := token.Data
 			attr := token.Attr
 			if tag != "title" && tag != "body" && tag != "a" {
-				z.Next()
 				continue
 			}
 			if tag == "title" {
@@ -203,7 +203,6 @@ func (s *Seed) parse(content []byte, p *Pool) (string, error) {
 				for _, a := range attr {
 					if a.Key == "href" {
 						if len(a.Val) == 0 || strings.HasPrefix(a.Val, "#") {
-							z.Next()
 							continue
 						}
 						validUrl, valid := s.validateUrl(a.Val, p)
@@ -212,7 +211,6 @@ func (s *Seed) parse(content []byte, p *Pool) (string, error) {
 							p.AddJob(*seed)
 						}
 					} else {
-						z.Next()
 						continue
 					}
 				}
@@ -228,6 +226,10 @@ func (s *Seed) validateUrl(url string, p *Pool) (string, bool) {
 		return url, true
 	} else if strings.HasPrefix(url, "/") {
 		newUrl := fmt.Sprintf("%s%s", fullHost, url)
+		return newUrl, true
+	} else if !strings.HasPrefix(url, protocol) && strings.HasSuffix(url, ".php") {
+		newUrl := fmt.Sprintf("%s/%s", fullHost, url)
+		fmt.Println(newUrl)
 		return newUrl, true
 	}
 	return "", false
