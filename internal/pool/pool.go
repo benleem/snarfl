@@ -2,6 +2,7 @@ package pool
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,18 +79,33 @@ func (p *Pool) Shutdown() {
 func (p *Pool) Writer(filename string) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		// return fmt.Errorf("error opening file: %s", err)
 		fmt.Println("error opening file: ", err)
 		return
 	}
 	defer file.Close()
+	file.WriteString("[")
 	for seed := range p.Results {
-		// fmt.Println(seed)
+		seedOut := &SeedJson{Url: seed.Url, Title: seed.Title, Content: seed.Content}
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false) // Disable HTML escaping
+		err := enc.Encode(seedOut)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 		fmt.Println("writing to file: ", filename)
-		if _, err := file.WriteString(seed.Url + "\n"); err != nil {
+		if _, err := file.WriteString(fmt.Sprintf("%s,", buf.String())); err != nil {
 			fmt.Println("error writing to file:", err)
 		}
 	}
+	file.WriteString("]")
+}
+
+type SeedJson struct {
+	Url     string `json:"url"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 type SeedResult struct {
@@ -229,7 +245,6 @@ func (s *Seed) validateUrl(url string, p *Pool) (string, bool) {
 		return newUrl, true
 	} else if !strings.HasPrefix(url, protocol) && strings.HasSuffix(url, ".php") {
 		newUrl := fmt.Sprintf("%s/%s", fullHost, url)
-		fmt.Println(newUrl)
 		return newUrl, true
 	}
 	return "", false

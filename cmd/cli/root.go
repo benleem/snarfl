@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"bufio"
@@ -11,7 +11,7 @@ import (
 
 const OUTPUT_DEFAULT = "./goscrape_data.json"
 
-func Exec() {
+func exec() {
 	outFlag := flag.String("o", OUTPUT_DEFAULT, "file to output data")
 	flag.Parse()
 	args := flag.Args()
