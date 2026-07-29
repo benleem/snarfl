@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -154,7 +156,7 @@ func (s *Seed) Task(p *CrawlerPool) SeedResult {
 	p.crawledUrls[s.url] = struct{}{}
 	p.mu.Unlock()
 	fmt.Println("fetching: ", s.url)
-	content, err := s.fetch()
+	content, err := s.fetch(p.initSeed.url, p.minTimeout, p.maxTimeout)
 	if err != nil {
 		return SeedResult{Url: s.url, Title: "", Content: string(content), Err: err}
 	}
@@ -166,7 +168,13 @@ func (s *Seed) Task(p *CrawlerPool) SeedResult {
 	return SeedResult{Url: s.url, Title: title, Content: string(content), Err: nil}
 }
 
-func (s *Seed) fetch() ([]byte, error) {
+func (s *Seed) fetch(initSeedString string, minTimeout float64, maxTimeout float64) ([]byte, error) {
+	if s.url != initSeedString {
+		// need test to make sure raandom number is in intended range
+		timeout := rand.Float64()*(maxTimeout-minTimeout) + minTimeout
+		fmt.Println(timeout)
+		time.Sleep(time.Duration(timeout))
+	}
 	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodGet, s.url, nil)
 	if err != nil {

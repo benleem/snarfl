@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	OUTPUT_DEFAULT      = "./goscrape_data.json"
+	OUTPUT_DEFAULT      = "./snarfl-data.json"
 	DEPTH_DEFAULT       = 0
 	HEADER_DEFAULT      = ""
 	MIN_TIMEOUT_DEFAULT = 0.0
