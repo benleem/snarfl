@@ -6,33 +6,45 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/benleem/snarfl/internal/scrape"
+	"github.com/benleem/snarfl/internal/crawler"
 )
 
-const OUTPUT_DEFAULT = "./goscrape_data.json"
+const (
+	OUTPUT_DEFAULT      = "./goscrape_data.json"
+	DEPTH_DEFAULT       = 0
+	HEADER_DEFAULT      = ""
+	MIN_TIMEOUT_DEFAULT = 0.0
+	MAX_TIMEOUT_DEFAULT = 3.0
+)
 
 func exec() {
 	outFlag := flag.String("o", OUTPUT_DEFAULT, "file to output data")
+	depthFlag := flag.Int("d", DEPTH_DEFAULT, "depth of links from init seed the crawler will follow")
+	headerFlag := flag.String("h", HEADER_DEFAULT, "header information used in requests")
+	minTimeFlag := flag.Float64("min", MIN_TIMEOUT_DEFAULT, "min time for timeout before next request")
+	maxTimeFlag := flag.Float64("max", MAX_TIMEOUT_DEFAULT, "max time for timeout before next request")
 	flag.Parse()
 	args := flag.Args()
-	var scrapeUrl string
+	var crawlUrl string
 	isStdin, err := checkStdin()
 	if err != nil {
 		errorToExit(err)
 	}
 	if isStdin {
-		scrapeUrl = readStdin()
+		fmt.Printf("output file: %s, depth: %v, header: %s, min timeout: %v, max timeout: %v\n", *outFlag, *depthFlag, *headerFlag, *minTimeFlag, *maxTimeFlag)
+		crawlUrl = readStdin()
 	} else {
+		fmt.Printf("output file: %s, depth: %v, header: %s, min timeout: %v, max timeout: %v\n", *outFlag, *depthFlag, *headerFlag, *minTimeFlag, *maxTimeFlag)
 		if len(args) == 0 || len(args) > 1 {
 			errorToExit(fmt.Errorf("incorrect format"))
 		}
-		scrapeUrl = args[0]
+		crawlUrl = args[0]
 	}
-	scraper, err := scrape.NewScraper(scrapeUrl, outFlag)
+	pool, err := crawler.NewCrawlerPool(10000, crawlUrl, *outFlag, *depthFlag, *headerFlag, *minTimeFlag, *maxTimeFlag)
 	if err != nil {
 		errorToExit(err)
 	}
-	scraper.Crawl()
+	pool.Crawl()
 }
 
 func checkStdin() (bool, error) {
