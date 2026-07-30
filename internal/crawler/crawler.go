@@ -250,9 +250,6 @@ func (s *Seed) parse(content []byte, p *CrawlerPool) (string, error) {
 			if tag == "a" {
 				for _, a := range attr {
 					if a.Key == "href" {
-						if len(a.Val) == 0 || strings.HasPrefix(a.Val, "#") {
-							continue
-						}
 						validUrl, valid := s.validateUrl(a.Val, p)
 						if valid {
 							seed := NewSeed(p.initSeed.url, validUrl, s.depth)
@@ -268,6 +265,11 @@ func (s *Seed) parse(content []byte, p *CrawlerPool) (string, error) {
 }
 
 func (s *Seed) validateUrl(url string, p *CrawlerPool) (string, bool) {
+	lastInd := strings.LastIndex(url, "/")
+	urlSuffix := url[lastInd+1:]
+	if len(url) == 0 || strings.HasPrefix(url, "#") || strings.HasPrefix(urlSuffix, "#") {
+		return "", false
+	}
 	protocol := fmt.Sprintf("%s://", p.scheme)
 	fullHost := fmt.Sprintf("%s%s", protocol, p.host)
 	if strings.HasPrefix(url, fullHost) {
