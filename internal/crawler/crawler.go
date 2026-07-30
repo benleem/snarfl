@@ -84,30 +84,79 @@ func (p *CrawlerPool) AddJob(s *Seed) {
 	p.jobs <- s
 }
 
+// func (p *CrawlerPool) Writer(filename string) {
+// 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+// 	if err != nil {
+// 		fmt.Println("error opening file: ", err)
+// 		return
+// 	}
+// 	defer file.Close()
+// 	file.WriteString("[")
+// 	for seed := range p.Results {
+// 		seedOut := &SeedJson{Url: seed.Url, Title: seed.Title, Content: seed.Content}
+// 		var buf bytes.Buffer
+// 		enc := json.NewEncoder(&buf)
+// 		enc.SetEscapeHTML(false) // Disable HTML escaping
+// 		err := enc.Encode(seedOut)
+// 		if err != nil {
+// 			fmt.Println(err)
+// 			return
+// 		}
+// 		fmt.Println("writing to file: ", filename)
+// 		if _, err := file.WriteString(fmt.Sprintf("%s,", buf.String())); err != nil {
+// 			fmt.Println("error writing to file:", err)
+// 		}
+// 	}
+// 	file.WriteString("]")
+// }
+
 func (p *CrawlerPool) Writer(filename string) {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// Use O_TRUNC to overwrite the file rather than appending onto old/corrupted JSON
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		fmt.Println("error opening file: ", err)
+		fmt.Println("error opening file:", err)
 		return
 	}
-	defer file.Close()
-	file.WriteString("[")
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			fmt.Println("error closing file:", err)
+			return
+		}
+	}()
+	if _, err := file.WriteString("[\n"); err != nil {
+		fmt.Println("error writing to file:", err)
+		return
+	}
+	first := true
 	for seed := range p.Results {
+		// Write a comma separator BEFORE every item except the first one
+		if !first {
+			if _, err := file.WriteString(",\n"); err != nil {
+				fmt.Println("error writing separator:", err)
+				return
+			}
+		}
+		first = false
 		seedOut := &SeedJson{Url: seed.Url, Title: seed.Title, Content: seed.Content}
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
-		enc.SetEscapeHTML(false) // Disable HTML escaping
-		err := enc.Encode(seedOut)
-		if err != nil {
-			fmt.Println(err)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(seedOut); err != nil {
+			fmt.Println("error encoding JSON:", err)
 			return
 		}
-		fmt.Println("writing to file: ", filename)
-		if _, err := file.WriteString(fmt.Sprintf("%s,", buf.String())); err != nil {
+		// Trim the automatic trailing newline added by enc.Encode()
+		data := bytes.TrimSpace(buf.Bytes())
+		fmt.Println("writing to file:", filename)
+		if _, err := file.Write(data); err != nil {
 			fmt.Println("error writing to file:", err)
+			return
 		}
 	}
-	file.WriteString("]")
+	if _, err := file.WriteString("\n]"); err != nil {
+		fmt.Println("error closing JSON array:", err)
+	}
 }
 
 func (p *CrawlerPool) Shutdown() {
