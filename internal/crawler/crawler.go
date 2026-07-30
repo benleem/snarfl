@@ -44,7 +44,7 @@ func NewCrawlerPool(maxGoRoutines int, initSeedString string, outFile string, de
 	host := u.Hostname()
 	scheme := u.Scheme
 	p := CrawlerPool{
-		initSeed:    NewSeed(initSeedString),
+		initSeed:    NewSeed(initSeedString, initSeedString, 0),
 		outFile:     outFile,
 		depth:       depth,
 		header:      header,
@@ -70,6 +70,16 @@ func (p *CrawlerPool) Crawl() {
 }
 
 func (p *CrawlerPool) AddJob(s *Seed) {
+	if s.depth > p.depth {
+		return
+	}
+	p.mu.Lock()
+	_, crawled := p.crawledUrls[s.url]
+	if crawled {
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Unlock()
 	p.jobWg.Add(1)
 	p.jobs <- s
 }
@@ -112,10 +122,6 @@ func (p *CrawlerPool) worker() {
 	for j := range p.jobs {
 		result := j.Task(p)
 		if result.Err != nil {
-			if result.Err.Error() == "duplicate" {
-				p.jobWg.Done()
-				continue
-			}
 			fmt.Println(result.Err.Error())
 			p.jobWg.Done()
 			continue
@@ -139,20 +145,20 @@ type SeedResult struct {
 }
 
 type Seed struct {
-	url string
+	url   string
+	depth int
 }
 
-func NewSeed(url string) *Seed {
-	return &Seed{url}
+func NewSeed(initSeed string, url string, previousDepth int) *Seed {
+	if url != initSeed {
+		return &Seed{url, previousDepth + 1}
+	}
+	return &Seed{url, previousDepth}
 }
 
 func (s *Seed) Task(p *CrawlerPool) SeedResult {
+	fmt.Println("current depth: ", s.depth)
 	p.mu.Lock()
-	_, crawled := p.crawledUrls[s.url]
-	if crawled {
-		p.mu.Unlock()
-		return SeedResult{Url: s.url, Title: "", Content: "", Err: fmt.Errorf("duplicate")}
-	}
 	p.crawledUrls[s.url] = struct{}{}
 	p.mu.Unlock()
 	fmt.Println("fetching: ", s.url)
@@ -249,7 +255,7 @@ func (s *Seed) parse(content []byte, p *CrawlerPool) (string, error) {
 						}
 						validUrl, valid := s.validateUrl(a.Val, p)
 						if valid {
-							seed := NewSeed(validUrl)
+							seed := NewSeed(p.initSeed.url, validUrl, s.depth)
 							p.AddJob(seed)
 						}
 					} else {

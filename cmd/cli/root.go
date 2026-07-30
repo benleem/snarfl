@@ -13,7 +13,7 @@ const (
 	OUTPUT_DEFAULT      = "./snarfl-data.json"
 	DEPTH_DEFAULT       = 0
 	HEADER_DEFAULT      = ""
-	MIN_TIMEOUT_DEFAULT = 0.0
+	MIN_TIMEOUT_DEFAULT = 1.0
 	MAX_TIMEOUT_DEFAULT = 3.0
 )
 
