@@ -1,0 +1,3 @@
+#!/bin/bash
+# run from base project directory
+go test -v ./...
